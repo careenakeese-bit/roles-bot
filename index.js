@@ -7,7 +7,7 @@ res.send("Bot is running");
 });
 
 app.listen(process.env.PORT || 3000, "0.0.0.0", () => {
-console.log("Web server running");
+console.log("Web server running on port 3000");
 });
 
 // ================= DISCORD BOT =================
@@ -46,11 +46,15 @@ partials: ["MESSAGE", "CHANNEL", "REACTION"]
 
 // ================= READY =================
 client.once("ready", async () => {
+console.log("READY EVENT FIRED");
 console.log(`${client.user.tag} is online!`);
 
-const channel = client.channels.cache.get(channelId);
+const channel = await client.channels.fetch(channelId).catch(() => null);
 if (!channel) return console.log("Channel not found");
 
+let saved = loadMessages();
+
+// ---------------- DROPDOWN ----------------
 const embed = new MessageEmbed()
 .setTitle("🎮 Game Roles")
 .setDescription("Select your games below")
@@ -72,20 +76,60 @@ const row = new MessageActionRow().addComponents(menu);
 
 await channel.send({ embeds: [embed], components: [row] });
 
-console.log("Dropdown sent.");
+// ---------------- REACTION ROLES ----------------
+for (const panel of reactionRolesPanels) {
+const ch = await client.channels.fetch(panel.channelId).catch(() => null);
+if (!ch) continue;
+
+let description = "";
+
+for (const [emoji, data] of Object.entries(panel.roles)) {
+description += `${emoji} ${data.label}\n`;
+}
+
+const rrEmbed = new MessageEmbed()
+.setTitle(panel.title)
+.setDescription(description)
+.setColor(panel.color);
+
+let msg;
+
+if (saved[panel.title]) {
+try {
+msg = await ch.messages.fetch(saved[panel.title]);
+await msg.edit({ embeds: [rrEmbed] });
+} catch {
+msg = await ch.send({ embeds: [rrEmbed] });
+}
+} else {
+msg = await ch.send({ embeds: [rrEmbed] });
+}
+
+saved[panel.title] = msg.id;
+
+for (const emoji of Object.keys(panel.roles)) {
+await msg.react(emoji).catch(() => {});
+}
+}
+
+saveMessages(saved);
+
+console.log("Panels loaded without duplicates.");
 });
 
-// ================= DROPDOWN FIX (THIS IS WHAT YOU WERE MISSING) =================
+// ================= FIX: DROPDOWN INTERACTION =================
 client.on("interactionCreate", async (interaction) => {
 if (!interaction.isSelectMenu()) return;
 if (interaction.customId !== "roles_menu") return;
 
-const member = interaction.member;
-
 try {
-// remove all roles first (optional behavior)
-for (const r of roles) {
-await member.roles.remove(r.roleId).catch(() => {});
+await interaction.deferReply({ ephemeral: true });
+
+const member = await interaction.guild.members.fetch(interaction.user.id);
+
+// remove existing roles in menu
+for (const role of roles) {
+await member.roles.remove(role.roleId).catch(() => {});
 }
 
 // add selected roles
@@ -93,20 +137,20 @@ for (const roleId of interaction.values) {
 await member.roles.add(roleId).catch(() => {});
 }
 
-await interaction.reply({
-content: "✅ Roles updated!",
-ephemeral: true
-});
+await interaction.editReply("✅ Roles updated!");
 } catch (err) {
-console.error(err);
+console.error("Interaction error:", err);
+
+if (!interaction.replied) {
 await interaction.reply({
-content: "❌ Error applying roles",
+content: "❌ Failed to update roles.",
 ephemeral: true
-});
+}).catch(() => {});
+}
 }
 });
 
-// ================= REACTION ROLES (KEEP YOUR EXISTING SYSTEM) =================
+// ================= REACTION ROLES =================
 client.on("messageReactionAdd", async (reaction, user) => {
 if (user.bot) return;
 if (reaction.partial) await reaction.fetch();
@@ -140,4 +184,7 @@ await member.roles.remove(data.roleId).catch(() => {});
 });
 
 // ================= LOGIN =================
+client.on("debug", console.log);
+client.on("error", console.error);
+
 client.login(process.env.TOKEN);
