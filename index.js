@@ -20,7 +20,7 @@ const {
   MessageEmbed
 } = require("discord.js");
 
-const { token, roles, reactionRolesPanels, channelId } = require("./config.js");
+const { roles, reactionRolesPanels, channelId } = require("./config.js");
 
 const MESSAGE_FILE = "./messages.json";
 
@@ -46,10 +46,14 @@ const client = new Client({
 
 // ================= READY =================
 client.once("ready", async () => {
+  console.log("READY EVENT FIRED");
   console.log(`${client.user.tag} is online!`);
 
   const channel = client.channels.cache.get(channelId);
-  if (!channel) return;
+  if (!channel) {
+    console.log("Channel not found");
+    return;
+  }
 
   let saved = loadMessages();
 
@@ -148,6 +152,10 @@ client.on("messageReactionRemove", async (reaction, user) => {
     await member.roles.remove(data.roleId).catch(() => {});
   }
 });
+
+// ================= DEBUG =================
+client.on("debug", console.log);
+client.on("error", console.error);
 
 // ================= LOGIN =================
 client.login(process.env.TOKEN);
