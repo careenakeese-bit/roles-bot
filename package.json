@@ -4,13 +4,12 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "nodemon index.js"
+    "start": "node index.js"
   },
   "keywords": [],
   "author": "Fruity",
   "license": "UNLICENSED",
   "dependencies": {
-    "discord.js": "^13.1.0",
-    "nodemon": "^2.0.12"
+    "discord.js": "^13.1.0"
   }
 }
