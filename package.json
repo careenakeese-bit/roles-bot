@@ -1,0 +1,16 @@
+{
+  "name": "dropdown",
+  "version": "1.1.5",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "nodemon index.js"
+  },
+  "keywords": [],
+  "author": "Fruity",
+  "license": "UNLICENSED",
+  "dependencies": {
+    "discord.js": "^13.1.0",
+    "nodemon": "^2.0.12"
+  }
+}
