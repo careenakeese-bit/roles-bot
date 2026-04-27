@@ -3,12 +3,11 @@ const express = require("express");
 const app = express();
 
 app.get("/", (req, res) => {
-res.status(200).send("Bot is running");
+res.send("Bot is running");
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, "0.0.0.0", () => {
-console.log("Web server running on port", PORT);
+app.listen(process.env.PORT || 3000, "0.0.0.0", () => {
+console.log("Web server running");
 });
 
 // ================= DISCORD BOT =================
@@ -25,22 +24,14 @@ const { roles, reactionRolesPanels, channelId } = require("./config.js");
 
 const MESSAGE_FILE = "./messages.json";
 
+// ================= MESSAGE STORAGE =================
 function loadMessages() {
-try {
 if (!fs.existsSync(MESSAGE_FILE)) return {};
 return JSON.parse(fs.readFileSync(MESSAGE_FILE));
-} catch (err) {
-console.error("Error loading messages.json:", err);
-return {};
-}
 }
 
 function saveMessages(data) {
-try {
 fs.writeFileSync(MESSAGE_FILE, JSON.stringify(data, null, 2));
-} catch (err) {
-console.error("Error saving messages.json:", err);
-}
 }
 
 // ================= CLIENT =================
@@ -51,7 +42,7 @@ Intents.FLAGS.GUILD_MEMBERS,
 Intents.FLAGS.GUILD_MESSAGES,
 Intents.FLAGS.GUILD_MESSAGE_REACTIONS
 ],
-partials: ["MESSAGE", "CHANNEL", "REACTION"]
+partials: ["MESSAGE", "CHANNEL", "REACTION", "USER"]
 });
 
 // ================= READY =================
@@ -61,7 +52,7 @@ console.log(`${client.user.tag} is online!`);
 
 const channel = client.channels.cache.get(channelId);
 if (!channel) {
-console.log("ERROR: channelId not found or bot has no access");
+console.log("Channel not found");
 return;
 }
 
@@ -76,7 +67,7 @@ const embed = new MessageEmbed()
 const menu = new MessageSelectMenu()
 .setCustomId("roles_menu")
 .setPlaceholder("Select games")
-.setMaxValues(Math.min(roles.length, 25)) // safety limit
+.setMaxValues(roles.length)
 .addOptions(
 roles.map(r => ({
 label: r.label,
@@ -103,7 +94,7 @@ description += `${emoji} ${data.label}\n`;
 const rrEmbed = new MessageEmbed()
 .setTitle(panel.title)
 .setDescription(description)
-.setColor(panel.color || "#00ffcc");
+.setColor(panel.color);
 
 let msg;
 
@@ -130,7 +121,7 @@ saveMessages(saved);
 console.log("Panels loaded without duplicates.");
 });
 
-// ================= REACTION ROLES =================
+// ================= REACTION ROLES (FIXED + DEBUGGING) =================
 client.on("messageReactionAdd", async (reaction, user) => {
 if (user.bot) return;
 
@@ -145,7 +136,10 @@ const data = panel.roles[reaction.emoji.name];
 if (!data) continue;
 
 const member = await guild.members.fetch(user.id);
-await member.roles.add(data.roleId).catch(console.error);
+
+await member.roles.add(data.roleId);
+
+console.log(`ROLE ADDED: ${data.roleId} to ${user.tag}`);
 }
 } catch (err) {
 console.error("Reaction add error:", err);
@@ -166,7 +160,10 @@ const data = panel.roles[reaction.emoji.name];
 if (!data) continue;
 
 const member = await guild.members.fetch(user.id);
-await member.roles.remove(data.roleId).catch(console.error);
+
+await member.roles.remove(data.roleId);
+
+console.log(`ROLE REMOVED: ${data.roleId} from ${user.tag}`);
 }
 } catch (err) {
 console.error("Reaction remove error:", err);
@@ -178,8 +175,4 @@ client.on("debug", console.log);
 client.on("error", console.error);
 
 // ================= LOGIN =================
-try {
 client.login(process.env.TOKEN);
-} catch (err) {
-console.error("LOGIN FAILED:", err);
-}
