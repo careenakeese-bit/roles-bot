@@ -24,7 +24,7 @@ const { roles, reactionRolesPanels, channelId } = require("./config.js");
 
 const MESSAGE_FILE = "./messages.json";
 
-// ================= MESSAGE STORAGE =================
+// ================= FILE HELPERS =================
 function loadMessages() {
 if (!fs.existsSync(MESSAGE_FILE)) return {};
 return JSON.parse(fs.readFileSync(MESSAGE_FILE));
@@ -42,19 +42,15 @@ Intents.FLAGS.GUILD_MEMBERS,
 Intents.FLAGS.GUILD_MESSAGES,
 Intents.FLAGS.GUILD_MESSAGE_REACTIONS
 ],
-partials: ["MESSAGE", "CHANNEL", "REACTION", "USER"]
+partials: ["MESSAGE", "CHANNEL", "REACTION"]
 });
 
 // ================= READY =================
 client.once("ready", async () => {
-console.log("READY EVENT FIRED");
 console.log(`${client.user.tag} is online!`);
 
 const channel = client.channels.cache.get(channelId);
-if (!channel) {
-console.log("Channel not found");
-return;
-}
+if (!channel) return console.log("Channel not found");
 
 let saved = loadMessages();
 
@@ -112,61 +108,79 @@ msg = await ch.send({ embeds: [rrEmbed] });
 saved[panel.title] = msg.id;
 
 for (const emoji of Object.keys(panel.roles)) {
-await msg.react(emoji).catch(console.error);
+await msg.react(emoji).catch(() => {});
 }
 }
 
 saveMessages(saved);
 
-console.log("Panels loaded without duplicates.");
+console.log("Panels loaded.");
 });
 
-// ================= REACTION ROLES (FIXED + DEBUGGING) =================
-client.on("messageReactionAdd", async (reaction, user) => {
-if (user.bot) return;
+// ================= DROPDOWN FIX (IMPORTANT) =================
+client.on("interactionCreate", async (interaction) => {
+if (!interaction.isSelectMenu()) return;
+if (interaction.customId !== "roles_menu") return;
 
 try {
+const member = await interaction.guild.members.fetch(interaction.user.id);
+
+for (const value of interaction.values) {
+const role = roles.find(r => r.roleId === value);
+if (role) {
+await member.roles.add(role.roleId);
+}
+}
+
+await interaction.reply({
+content: "Roles updated!",
+ephemeral: true
+});
+
+} catch (err) {
+console.error(err);
+
+if (!interaction.replied) {
+await interaction.reply({
+content: "Something went wrong.",
+ephemeral: true
+});
+}
+}
+});
+
+// ================= REACTION ROLES =================
+client.on("messageReactionAdd", async (reaction, user) => {
+if (user.bot) return;
 if (reaction.partial) await reaction.fetch();
 
 const guild = reaction.message.guild;
 if (!guild) return;
 
 for (const panel of reactionRolesPanels) {
-const data = panel.roles[reaction.emoji.name];
+const key = reaction.emoji.id || reaction.emoji.name;
+const data = panel.roles[key];
 if (!data) continue;
 
 const member = await guild.members.fetch(user.id);
-
-await member.roles.add(data.roleId);
-
-console.log(`ROLE ADDED: ${data.roleId} to ${user.tag}`);
-}
-} catch (err) {
-console.error("Reaction add error:", err);
+await member.roles.add(data.roleId).catch(() => {});
 }
 });
 
 client.on("messageReactionRemove", async (reaction, user) => {
 if (user.bot) return;
-
-try {
 if (reaction.partial) await reaction.fetch();
 
 const guild = reaction.message.guild;
 if (!guild) return;
 
 for (const panel of reactionRolesPanels) {
-const data = panel.roles[reaction.emoji.name];
+const key = reaction.emoji.id || reaction.emoji.name;
+const data = panel.roles[key];
 if (!data) continue;
 
 const member = await guild.members.fetch(user.id);
-
-await member.roles.remove(data.roleId);
-
-console.log(`ROLE REMOVED: ${data.roleId} from ${user.tag}`);
-}
-} catch (err) {
-console.error("Reaction remove error:", err);
+await member.roles.remove(data.roleId).catch(() => {});
 }
 });
 
