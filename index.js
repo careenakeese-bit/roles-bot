@@ -121,33 +121,33 @@ saveMessages(saved);
 console.log("Panels loaded without duplicates.");
 });
 
-// ================= INTERACTION FIX =================
+// ================= DROPDOWN FIX (IMPORTANT) =================
 client.on("interactionCreate", async (interaction) => {
 if (!interaction.isStringSelectMenu()) return;
 if (interaction.customId !== "roles_menu") return;
 
 try {
-const member = interaction.member; // ✅ SAFE (no fetch)
+await interaction.deferReply({ ephemeral: true });
 
-// remove all dropdown roles
-for (const role of roles) {
-await member.roles.remove(role.roleId).catch(() => {});
+const member = await interaction.guild.members.fetch(interaction.user.id);
+
+// REMOVE OLD ROLES (safe check)
+for (const r of roles) {
+const role = interaction.guild.roles.cache.get(r.roleId);
+if (role) await member.roles.remove(role).catch(() => {});
 }
 
-// add selected roles
+// ADD NEW ROLES
 for (const roleId of interaction.values) {
-await member.roles.add(roleId).catch(() => {});
+const role = interaction.guild.roles.cache.get(roleId);
+if (role) await member.roles.add(role).catch(() => {});
 }
 
-await interaction.reply({
-content: "✅ Roles updated!",
-ephemeral: true
-});
-
+await interaction.editReply("✅ Roles updated!");
 } catch (err) {
 console.error("Interaction error:", err);
 
-if (!interaction.replied) {
+if (!interaction.replied && !interaction.deferred) {
 await interaction.reply({
 content: "❌ Failed to update roles.",
 ephemeral: true
