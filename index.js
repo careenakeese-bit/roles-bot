@@ -1,3 +1,16 @@
+// ================= EXPRESS (KEEP FLY ALIVE) =================
+const express = require("express");
+const app = express();
+
+app.get("/", (req, res) => {
+  res.send("Bot is running");
+});
+
+app.listen(process.env.PORT || 3000, "0.0.0.0", () => {
+  console.log("Web server running");
+});
+
+// ================= DISCORD BOT =================
 const fs = require("fs");
 const {
   Client,
@@ -20,15 +33,18 @@ function saveMessages(data) {
   fs.writeFileSync(MESSAGE_FILE, JSON.stringify(data, null, 2));
 }
 
+// ================= CLIENT =================
 const client = new Client({
   intents: [
     Intents.FLAGS.GUILDS,
     Intents.FLAGS.GUILD_MEMBERS,
-    Intents.FLAGS.GUILD_MESSAGE_REACTIONS,
-    Intents.FLAGS.GUILD_MESSAGES
-  ]
+    Intents.FLAGS.GUILD_MESSAGES,
+    Intents.FLAGS.GUILD_MESSAGE_REACTIONS
+  ],
+  partials: ["MESSAGE", "CHANNEL", "REACTION"]
 });
 
+// ================= READY =================
 client.once("ready", async () => {
   console.log(`${client.user.tag} is online!`);
 
@@ -59,7 +75,7 @@ client.once("ready", async () => {
 
   await channel.send({ embeds: [embed], components: [row] });
 
-  // ---------------- REACTION PANELS (NO DUPLICATES) ----------------
+  // ---------------- REACTION ROLES ----------------
   for (const panel of reactionRolesPanels) {
     const ch = client.channels.cache.get(panel.channelId);
     if (!ch) continue;
@@ -100,17 +116,20 @@ client.once("ready", async () => {
   console.log("Panels loaded without duplicates.");
 });
 
-// ---------------- REACTION ROLES ----------------
+// ================= REACTION ROLES =================
 client.on("messageReactionAdd", async (reaction, user) => {
   if (user.bot) return;
   if (reaction.partial) await reaction.fetch();
+
+  const guild = reaction.message.guild;
+  if (!guild) return;
 
   for (const panel of reactionRolesPanels) {
     const data = panel.roles[reaction.emoji.name];
     if (!data) continue;
 
-    const member = await reaction.message.guild.members.fetch(user.id);
-    await member.roles.add(data.roleId);
+    const member = await guild.members.fetch(user.id);
+    await member.roles.add(data.roleId).catch(() => {});
   }
 });
 
@@ -118,13 +137,17 @@ client.on("messageReactionRemove", async (reaction, user) => {
   if (user.bot) return;
   if (reaction.partial) await reaction.fetch();
 
+  const guild = reaction.message.guild;
+  if (!guild) return;
+
   for (const panel of reactionRolesPanels) {
     const data = panel.roles[reaction.emoji.name];
     if (!data) continue;
 
-    const member = await reaction.message.guild.members.fetch(user.id);
-    await member.roles.remove(data.roleId);
+    const member = await guild.members.fetch(user.id);
+    await member.roles.remove(data.roleId).catch(() => {});
   }
 });
 
+// ================= LOGIN =================
 client.login(process.env.TOKEN);
