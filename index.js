@@ -121,35 +121,50 @@ saveMessages(saved);
 console.log("Panels loaded without duplicates.");
 });
 
-// ================= DROPDOWN FIX (IMPORTANT) =================
+// ================= INTERACTION FIX (SAFE VERSION) =================
 client.on("interactionCreate", async (interaction) => {
 if (!interaction.isStringSelectMenu()) return;
 if (interaction.customId !== "roles_menu") return;
 
 try {
-await interaction.deferReply({ ephemeral: true });
-
 const member = await interaction.guild.members.fetch(interaction.user.id);
 
-// REMOVE OLD ROLES (safe check)
+console.log("Dropdown clicked:", interaction.user.tag);
+console.log("Selected:", interaction.values);
+
+// REMOVE ALL DROPDOWN ROLES FIRST
 for (const r of roles) {
 const role = interaction.guild.roles.cache.get(r.roleId);
-if (role) await member.roles.remove(role).catch(() => {});
+if (!role) continue;
+
+await member.roles.remove(role).catch(() => {});
 }
 
-// ADD NEW ROLES
-for (const roleId of interaction.values) {
+// ADD SELECTED ROLES
+for (const roleId of interaction.values || []) {
 const role = interaction.guild.roles.cache.get(roleId);
-if (role) await member.roles.add(role).catch(() => {});
+
+if (!role) {
+console.log("Missing role ID:", roleId);
+continue;
 }
 
-await interaction.editReply("✅ Roles updated!");
+await member.roles.add(role).catch(err => {
+console.log("Failed adding:", role.name, err.message);
+});
+}
+
+await interaction.reply({
+content: "✅ Roles updated!",
+ephemeral: true
+});
+
 } catch (err) {
 console.error("Interaction error:", err);
 
-if (!interaction.replied && !interaction.deferred) {
+if (!interaction.replied) {
 await interaction.reply({
-content: "❌ Failed to update roles.",
+content: "❌ Something went wrong updating roles.",
 ephemeral: true
 }).catch(() => {});
 }
