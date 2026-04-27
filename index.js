@@ -1,4 +1,4 @@
-// ================= EXPRESS (KEEP FLY ALIVE) =================
+// ================= EXPRESS (KEEP ALIVE) =================
 const express = require("express");
 const app = express();
 
@@ -27,7 +27,7 @@ const MESSAGE_FILE = "./messages.json";
 
 function loadMessages() {
 if (!fs.existsSync(MESSAGE_FILE)) return {};
-return JSON.parse(fs.readFileSync(MESSAGE_FILE));
+return JSON.parse(fs.readFileSync(MESSAGE_FILE, "utf8"));
 }
 
 function saveMessages(data) {
@@ -55,7 +55,7 @@ if (!channel) return console.log("Channel not found");
 
 let saved = loadMessages();
 
-// ---------------- DROPDOWN ----------------
+// ================= DROPDOWN =================
 const embed = new EmbedBuilder()
 .setTitle("🎮 Game Roles")
 .setDescription("Select your games below")
@@ -80,7 +80,7 @@ embeds: [embed],
 components: [row]
 });
 
-// ---------------- REACTION ROLES ----------------
+// ================= REACTION ROLES PANELS =================
 for (const panel of reactionRolesPanels) {
 const ch = await client.channels.fetch(panel.channelId).catch(() => null);
 if (!ch) continue;
@@ -121,50 +121,33 @@ saveMessages(saved);
 console.log("Panels loaded without duplicates.");
 });
 
-// ================= INTERACTION FIX (SAFE VERSION) =================
+// ================= DROPDOWN INTERACTIONS =================
 client.on("interactionCreate", async (interaction) => {
 if (!interaction.isStringSelectMenu()) return;
 if (interaction.customId !== "roles_menu") return;
 
 try {
+await interaction.deferReply({ ephemeral: true });
+
 const member = await interaction.guild.members.fetch(interaction.user.id);
 
-console.log("Dropdown clicked:", interaction.user.tag);
-console.log("Selected:", interaction.values);
-
-// REMOVE ALL DROPDOWN ROLES FIRST
-for (const r of roles) {
-const role = interaction.guild.roles.cache.get(r.roleId);
-if (!role) continue;
-
-await member.roles.remove(role).catch(() => {});
+// remove old roles
+for (const role of roles) {
+await member.roles.remove(role.roleId).catch(() => {});
 }
 
-// ADD SELECTED ROLES
-for (const roleId of interaction.values || []) {
-const role = interaction.guild.roles.cache.get(roleId);
-
-if (!role) {
-console.log("Missing role ID:", roleId);
-continue;
+// add selected roles
+for (const roleId of interaction.values) {
+await member.roles.add(roleId).catch(() => {});
 }
 
-await member.roles.add(role).catch(err => {
-console.log("Failed adding:", role.name, err.message);
-});
-}
-
-await interaction.reply({
-content: "✅ Roles updated!",
-ephemeral: true
-});
-
+await interaction.editReply("✅ Roles updated!");
 } catch (err) {
 console.error("Interaction error:", err);
 
 if (!interaction.replied) {
 await interaction.reply({
-content: "❌ Something went wrong updating roles.",
+content: "❌ Failed to update roles.",
 ephemeral: true
 }).catch(() => {});
 }
