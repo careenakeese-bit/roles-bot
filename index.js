@@ -14,10 +14,11 @@ console.log("Web server running on port 3000");
 const fs = require("fs");
 const {
 Client,
-Intents,
-MessageActionRow,
-MessageSelectMenu,
-MessageEmbed
+GatewayIntentBits,
+Partials,
+ActionRowBuilder,
+StringSelectMenuBuilder,
+EmbedBuilder
 } = require("discord.js");
 
 const { roles, reactionRolesPanels, channelId } = require("./config.js");
@@ -36,12 +37,12 @@ fs.writeFileSync(MESSAGE_FILE, JSON.stringify(data, null, 2));
 // ================= CLIENT =================
 const client = new Client({
 intents: [
-Intents.FLAGS.GUILDS,
-Intents.FLAGS.GUILD_MEMBERS,
-Intents.FLAGS.GUILD_MESSAGES,
-Intents.FLAGS.GUILD_MESSAGE_REACTIONS
+GatewayIntentBits.Guilds,
+GatewayIntentBits.GuildMembers,
+GatewayIntentBits.GuildMessages,
+GatewayIntentBits.GuildMessageReactions
 ],
-partials: ["MESSAGE", "CHANNEL", "REACTION"]
+partials: [Partials.Message, Partials.Channel, Partials.Reaction]
 });
 
 // ================= READY =================
@@ -55,12 +56,12 @@ if (!channel) return console.log("Channel not found");
 let saved = loadMessages();
 
 // ---------------- DROPDOWN ----------------
-const embed = new MessageEmbed()
+const embed = new EmbedBuilder()
 .setTitle("🎮 Game Roles")
 .setDescription("Select your games below")
 .setColor("#ff0080");
 
-const menu = new MessageSelectMenu()
+const menu = new StringSelectMenuBuilder()
 .setCustomId("roles_menu")
 .setPlaceholder("Select games")
 .setMaxValues(roles.length)
@@ -72,9 +73,12 @@ emoji: r.emoji
 }))
 );
 
-const row = new MessageActionRow().addComponents(menu);
+const row = new ActionRowBuilder().addComponents(menu);
 
-await channel.send({ embeds: [embed], components: [row] });
+await channel.send({
+embeds: [embed],
+components: [row]
+});
 
 // ---------------- REACTION ROLES ----------------
 for (const panel of reactionRolesPanels) {
@@ -87,7 +91,7 @@ for (const [emoji, data] of Object.entries(panel.roles)) {
 description += `${emoji} ${data.label}\n`;
 }
 
-const rrEmbed = new MessageEmbed()
+const rrEmbed = new EmbedBuilder()
 .setTitle(panel.title)
 .setDescription(description)
 .setColor(panel.color);
@@ -117,9 +121,9 @@ saveMessages(saved);
 console.log("Panels loaded without duplicates.");
 });
 
-// ================= FIX: DROPDOWN INTERACTION =================
+// ================= INTERACTION FIX (THIS FIXES YOUR ERROR) =================
 client.on("interactionCreate", async (interaction) => {
-if (!interaction.isSelectMenu()) return;
+if (!interaction.isStringSelectMenu()) return;
 if (interaction.customId !== "roles_menu") return;
 
 try {
@@ -127,7 +131,7 @@ await interaction.deferReply({ ephemeral: true });
 
 const member = await interaction.guild.members.fetch(interaction.user.id);
 
-// remove existing roles in menu
+// remove old roles from dropdown list
 for (const role of roles) {
 await member.roles.remove(role.roleId).catch(() => {});
 }
