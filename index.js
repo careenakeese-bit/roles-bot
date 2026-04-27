@@ -121,17 +121,15 @@ saveMessages(saved);
 console.log("Panels loaded without duplicates.");
 });
 
-// ================= INTERACTION FIX (THIS FIXES YOUR ERROR) =================
+// ================= INTERACTION FIX =================
 client.on("interactionCreate", async (interaction) => {
 if (!interaction.isStringSelectMenu()) return;
 if (interaction.customId !== "roles_menu") return;
 
 try {
-await interaction.deferReply({ ephemeral: true });
+const member = interaction.member; // ✅ SAFE (no fetch)
 
-const member = await interaction.guild.members.fetch(interaction.user.id);
-
-// remove old roles from dropdown list
+// remove all dropdown roles
 for (const role of roles) {
 await member.roles.remove(role.roleId).catch(() => {});
 }
@@ -141,7 +139,11 @@ for (const roleId of interaction.values) {
 await member.roles.add(roleId).catch(() => {});
 }
 
-await interaction.editReply("✅ Roles updated!");
+await interaction.reply({
+content: "✅ Roles updated!",
+ephemeral: true
+});
+
 } catch (err) {
 console.error("Interaction error:", err);
 
