@@ -117,12 +117,12 @@ saveMessages(saved);
 console.log("Panels loaded.");
 });
 
-// ================= DROPDOWN FIX (IMPORTANT) =================
+// ================= DROPDOWN FIX (THIS IS THE IMPORTANT PART) =================
 client.on("interactionCreate", async (interaction) => {
-if (!interaction.isSelectMenu()) return;
+try {
+if (!interaction.isStringSelectMenu()) return;
 if (interaction.customId !== "roles_menu") return;
 
-try {
 const member = await interaction.guild.members.fetch(interaction.user.id);
 
 for (const value of interaction.values) {
@@ -138,11 +138,11 @@ ephemeral: true
 });
 
 } catch (err) {
-console.error(err);
+console.error("Dropdown error:", err);
 
 if (!interaction.replied) {
 await interaction.reply({
-content: "Something went wrong.",
+content: "Something broke while assigning roles.",
 ephemeral: true
 });
 }
