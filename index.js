@@ -7,11 +7,13 @@ res.send("Bot is running");
 });
 
 app.listen(process.env.PORT || 3000, "0.0.0.0", () => {
-console.log("Web server running on port 3000");
+console.log("Web server running");
 });
 
-// ================= DISCORD BOT =================
+// ================= DISCORD =================
 const fs = require("fs");
+const Discord = require("discord.js");
+
 const {
 Client,
 GatewayIntentBits,
@@ -19,15 +21,20 @@ Partials,
 ActionRowBuilder,
 StringSelectMenuBuilder,
 EmbedBuilder
-} = require("discord.js");
+} = Discord;
 
 const { roles, reactionRolesPanels, channelId } = require("./config.js");
 
 const MESSAGE_FILE = "./messages.json";
 
+// ================= SAFE STORAGE =================
 function loadMessages() {
+try {
 if (!fs.existsSync(MESSAGE_FILE)) return {};
 return JSON.parse(fs.readFileSync(MESSAGE_FILE, "utf8"));
+} catch {
+return {};
+}
 }
 
 function saveMessages(data) {
@@ -47,13 +54,12 @@ partials: [Partials.Message, Partials.Channel, Partials.Reaction]
 
 // ================= READY =================
 client.once("ready", async () => {
-console.log("READY EVENT FIRED");
-console.log(`${client.user.tag} is online!`);
+console.log(`${client.user.tag} is online`);
 
 const channel = await client.channels.fetch(channelId).catch(() => null);
 if (!channel) return console.log("Channel not found");
 
-let saved = loadMessages();
+const saved = loadMessages();
 
 // ================= DROPDOWN =================
 const embed = new EmbedBuilder()
@@ -75,36 +81,37 @@ emoji: r.emoji
 
 const row = new ActionRowBuilder().addComponents(menu);
 
-await channel.send({
-embeds: [embed],
-components: [row]
-});
+// prevent duplicate dropdown spam
+const recent = await channel.messages.fetch({ limit: 10 });
+const exists = recent.some(
+m => m.author.id === client.user.id && m.components.length > 0
+);
 
-// ================= REACTION ROLES PANELS =================
+if (!exists) {
+await channel.send({ embeds: [embed], components: [row] });
+}
+
+// ================= REACTION ROLES =================
 for (const panel of reactionRolesPanels) {
 const ch = await client.channels.fetch(panel.channelId).catch(() => null);
 if (!ch) continue;
 
-let description = "";
-
+let desc = "";
 for (const [emoji, data] of Object.entries(panel.roles)) {
-description += `${emoji} ${data.label}\n`;
+desc += `${emoji} ${data.label}\n`;
 }
 
 const rrEmbed = new EmbedBuilder()
 .setTitle(panel.title)
-.setDescription(description)
+.setDescription(desc)
 .setColor(panel.color);
 
 let msg;
 
-if (saved[panel.title]) {
 try {
+if (saved[panel.title]) {
 msg = await ch.messages.fetch(saved[panel.title]);
 await msg.edit({ embeds: [rrEmbed] });
-} catch {
-msg = await ch.send({ embeds: [rrEmbed] });
-}
 } else {
 msg = await ch.send({ embeds: [rrEmbed] });
 }
@@ -114,15 +121,18 @@ saved[panel.title] = msg.id;
 for (const emoji of Object.keys(panel.roles)) {
 await msg.react(emoji).catch(() => {});
 }
+} catch (err) {
+console.log("Panel error:", err.message);
+}
 }
 
 saveMessages(saved);
 
-console.log("Panels loaded without duplicates.");
+console.log("Bot loaded successfully");
 });
 
-// ================= DROPDOWN INTERACTIONS =================
-client.on("interactionCreate", async (interaction) => {
+// ================= DROPDOWN INTERACTION =================
+client.on("interactionCreate", async interaction => {
 if (!interaction.isStringSelectMenu()) return;
 if (interaction.customId !== "roles_menu") return;
 
@@ -131,23 +141,21 @@ await interaction.deferReply({ ephemeral: true });
 
 const member = await interaction.guild.members.fetch(interaction.user.id);
 
-// remove old roles
 for (const role of roles) {
 await member.roles.remove(role.roleId).catch(() => {});
 }
 
-// add selected roles
 for (const roleId of interaction.values) {
 await member.roles.add(roleId).catch(() => {});
 }
 
 await interaction.editReply("✅ Roles updated!");
 } catch (err) {
-console.error("Interaction error:", err);
+console.error(err);
 
 if (!interaction.replied) {
 await interaction.reply({
-content: "❌ Failed to update roles.",
+content: "❌ Failed to update roles",
 ephemeral: true
 }).catch(() => {});
 }
@@ -163,11 +171,11 @@ const guild = reaction.message.guild;
 if (!guild) return;
 
 for (const panel of reactionRolesPanels) {
-const data = panel.roles[reaction.emoji.name];
-if (!data) continue;
+const role = panel.roles[reaction.emoji.name];
+if (!role) continue;
 
 const member = await guild.members.fetch(user.id);
-await member.roles.add(data.roleId).catch(() => {});
+await member.roles.add(role.roleId).catch(() => {});
 }
 });
 
@@ -179,16 +187,13 @@ const guild = reaction.message.guild;
 if (!guild) return;
 
 for (const panel of reactionRolesPanels) {
-const data = panel.roles[reaction.emoji.name];
-if (!data) continue;
+const role = panel.roles[reaction.emoji.name];
+if (!role) continue;
 
 const member = await guild.members.fetch(user.id);
-await member.roles.remove(data.roleId).catch(() => {});
+await member.roles.remove(role.roleId).catch(() => {});
 }
 });
 
 // ================= LOGIN =================
-client.on("debug", console.log);
-client.on("error", console.error);
-
 client.login(process.env.TOKEN);
