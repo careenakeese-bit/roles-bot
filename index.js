@@ -196,4 +196,5 @@ await member.roles.remove(role.roleId).catch(() => {});
 });
 
 // ================= LOGIN =================
+console.log("TOKEN value:", process.env.TOKEN ? "SET" : "UNDEFINED");
 client.login(process.env.TOKEN);
