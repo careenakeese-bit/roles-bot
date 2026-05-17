@@ -1,18 +1,5 @@
-// ================= EXPRESS (KEEP ALIVE) =================
 const express = require("express");
-const app = express();
-
-app.get("/", (req, res) => {
-res.send("Bot is running");
-});
-
-app.listen(process.env.PORT || 3000, "0.0.0.0", () => {
-console.log("Web server running");
-});
-
-// ================= DISCORD =================
 const fs = require("fs");
-const Discord = require("discord.js");
 
 const {
 Client,
@@ -21,20 +8,27 @@ Partials,
 ActionRowBuilder,
 StringSelectMenuBuilder,
 EmbedBuilder
-} = Discord;
+} = require("discord.js");
 
 const { roles, reactionRolesPanels, channelId } = require("./config.js");
 
+// ================= EXPRESS (KEEP ALIVE) =================
+const app = express();
+
+app.get("/", (req, res) => {
+res.send("Bot is running");
+});
+
+app.listen(process.env.PORT || 3000, "0.0.0.0", () => {
+console.log("Web server running on port 3000");
+});
+
+// ================= MESSAGE STORAGE =================
 const MESSAGE_FILE = "./messages.json";
 
-// ================= SAFE STORAGE =================
 function loadMessages() {
-try {
 if (!fs.existsSync(MESSAGE_FILE)) return {};
 return JSON.parse(fs.readFileSync(MESSAGE_FILE, "utf8"));
-} catch {
-return {};
-}
 }
 
 function saveMessages(data) {
@@ -54,7 +48,8 @@ partials: [Partials.Message, Partials.Channel, Partials.Reaction]
 
 // ================= READY =================
 client.once("ready", async () => {
-console.log(`${client.user.tag} is online`);
+console.log("READY EVENT FIRED");
+console.log(`${client.user.tag} is online!`);
 
 const channel = await client.channels.fetch(channelId).catch(() => null);
 if (!channel) return console.log("Channel not found");
@@ -81,37 +76,46 @@ emoji: r.emoji
 
 const row = new ActionRowBuilder().addComponents(menu);
 
-// prevent duplicate dropdown spam
-const recent = await channel.messages.fetch({ limit: 10 });
-const exists = recent.some(
-m => m.author.id === client.user.id && m.components.length > 0
-);
+let dropdownMsg;
 
-if (!exists) {
-await channel.send({ embeds: [embed], components: [row] });
+if (saved["gameRolesDropdown"]) {
+try {
+dropdownMsg = await channel.messages.fetch(saved["gameRolesDropdown"]);
+await dropdownMsg.edit({ embeds: [embed], components: [row] });
+} catch {
+dropdownMsg = await channel.send({ embeds: [embed], components: [row] });
 }
+} else {
+dropdownMsg = await channel.send({ embeds: [embed], components: [row] });
+}
+
+saved["gameRolesDropdown"] = dropdownMsg.id;
 
 // ================= REACTION ROLES =================
 for (const panel of reactionRolesPanels) {
 const ch = await client.channels.fetch(panel.channelId).catch(() => null);
 if (!ch) continue;
 
-let desc = "";
+let description = "";
+
 for (const [emoji, data] of Object.entries(panel.roles)) {
-desc += `${emoji} ${data.label}\n`;
+description += `${emoji} ${data.label}\n`;
 }
 
 const rrEmbed = new EmbedBuilder()
 .setTitle(panel.title)
-.setDescription(desc)
+.setDescription(description)
 .setColor(panel.color);
 
 let msg;
 
-try {
 if (saved[panel.title]) {
+try {
 msg = await ch.messages.fetch(saved[panel.title]);
 await msg.edit({ embeds: [rrEmbed] });
+} catch {
+msg = await ch.send({ embeds: [rrEmbed] });
+}
 } else {
 msg = await ch.send({ embeds: [rrEmbed] });
 }
@@ -121,18 +125,15 @@ saved[panel.title] = msg.id;
 for (const emoji of Object.keys(panel.roles)) {
 await msg.react(emoji).catch(() => {});
 }
-} catch (err) {
-console.log("Panel error:", err.message);
-}
 }
 
 saveMessages(saved);
 
-console.log("Bot loaded successfully");
+console.log("Panels loaded without duplicates.");
 });
 
 // ================= DROPDOWN INTERACTION =================
-client.on("interactionCreate", async interaction => {
+client.on("interactionCreate", async (interaction) => {
 if (!interaction.isStringSelectMenu()) return;
 if (interaction.customId !== "roles_menu") return;
 
@@ -151,50 +152,77 @@ await member.roles.add(roleId).catch(() => {});
 
 await interaction.editReply("✅ Roles updated!");
 } catch (err) {
-console.error(err);
-
-if (!interaction.replied) {
-await interaction.reply({
-content: "❌ Failed to update roles",
-ephemeral: true
-}).catch(() => {});
-}
+console.error("Interaction error:", err);
 }
 });
 
 // ================= REACTION ROLES =================
 client.on("messageReactionAdd", async (reaction, user) => {
 if (user.bot) return;
-if (reaction.partial) await reaction.fetch();
+
+if (reaction.partial) {
+try {
+await reaction.fetch();
+} catch {
+return;
+}
+}
 
 const guild = reaction.message.guild;
 if (!guild) return;
 
-for (const panel of reactionRolesPanels) {
-const role = panel.roles[reaction.emoji.name];
-if (!role) continue;
+const saved = loadMessages();
 
+for (const panel of reactionRolesPanels) {
+if (reaction.message.id !== saved[panel.title]) continue;
+
+const data = panel.roles[reaction.emoji.name];
+if (!data) continue;
+
+try {
 const member = await guild.members.fetch(user.id);
-await member.roles.add(role.roleId).catch(() => {});
+await member.roles.add(data.roleId);
+console.log(`Added role ${data.roleId} to ${user.tag}`);
+} catch (err) {
+console.error(err);
+}
 }
 });
 
 client.on("messageReactionRemove", async (reaction, user) => {
 if (user.bot) return;
-if (reaction.partial) await reaction.fetch();
+
+if (reaction.partial) {
+try {
+await reaction.fetch();
+} catch {
+return;
+}
+}
 
 const guild = reaction.message.guild;
 if (!guild) return;
 
-for (const panel of reactionRolesPanels) {
-const role = panel.roles[reaction.emoji.name];
-if (!role) continue;
+const saved = loadMessages();
 
+for (const panel of reactionRolesPanels) {
+if (reaction.message.id !== saved[panel.title]) continue;
+
+const data = panel.roles[reaction.emoji.name];
+if (!data) continue;
+
+try {
 const member = await guild.members.fetch(user.id);
-await member.roles.remove(role.roleId).catch(() => {});
+await member.roles.remove(data.roleId);
+console.log(`Removed role ${data.roleId} from ${user.tag}`);
+} catch (err) {
+console.error(err);
+}
 }
 });
 
 // ================= LOGIN =================
-console.log("TOKEN value:", process.env.TOKEN ? "SET" : "UNDEFINED");
+client.on("debug", console.log);
+client.on("error", console.error);
+
 client.login(process.env.TOKEN);
